@@ -11,7 +11,10 @@ fn main() -> Result<()> {
         "RegionInfo",
     ];
 
-    let protos: Vec<String> = protos.iter().map(|&x| format!("{}/{}.proto", proto_dir, x)).collect();
+    let protos: Vec<String> = protos
+        .iter()
+        .map(|&x| format!("{}/{}.proto", proto_dir, x))
+        .collect();
 
     let mut config = prost_build::Config::new();
 

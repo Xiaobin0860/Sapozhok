@@ -1,33 +1,32 @@
 use std::sync::Arc;
 
-extern crate futures;
-extern crate base64;
 extern crate actix_web;
+extern crate base64;
+extern crate futures;
 extern crate openssl;
 
-use serde::{Deserialize, Deserializer};
 use futures::executor;
+use serde::{Deserialize, Deserializer};
 
-use actix_web::{rt::System, web, App, HttpResponse, HttpServer, middleware::Logger};
+use actix_web::{middleware::Logger, rt::System, web, App, HttpResponse, HttpServer};
+use openssl::rsa::Padding;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-use openssl::rsa::{Padding};
 use rand::{distributions::Alphanumeric, Rng};
 
 use prost::Message;
 
 use mhycrypt;
 use openssl::hash::MessageDigest;
-use openssl::pkey::{PKey};
+use openssl::pkey::PKey;
 use openssl::sign::Signer;
-use version_compare::{Version};
+use version_compare::Version;
 
 use crate::dispatch::DispatchConfig;
 
 #[derive(Clone)]
-pub struct DispatchServer {
-}
+pub struct DispatchServer {}
 
-#[derive(Deserialize,Debug)]
+#[derive(Deserialize, Debug)]
 struct ClientInfo {
     version: String,
     lang: i32,
@@ -40,22 +39,20 @@ struct ClientInfo {
     key_id: Option<u8>,
 }
 
-#[derive(Deserialize,Debug)]
-struct TokenToVerify
-{
+#[derive(Deserialize, Debug)]
+struct TokenToVerify {
     uid: String,
     token: String,
 }
 
-#[derive(Deserialize,Debug)]
-struct ActionToCheck
-{
+#[derive(Deserialize, Debug)]
+struct ActionToCheck {
     action_type: String,
     api_name: String,
     username: Option<String>,
 }
 
-#[derive(Deserialize,Debug)]
+#[derive(Deserialize, Debug)]
 struct LoginData {
     account: String,
     is_crypto: bool,
@@ -71,7 +68,7 @@ struct GranterData {
     data: String,
 }*/
 
-#[derive(Deserialize,Debug)]
+#[derive(Deserialize, Debug)]
 struct GranterData {
     #[serde(deserialize_with = "deserialize_u32_or_string")]
     app_id: u32,
@@ -84,8 +81,8 @@ struct GranterData {
 
 /* Deserialization hack */
 fn deserialize_u32_or_string<'de, D>(deserializer: D) -> Result<u32, D::Error>
-    where
-        D: Deserializer<'de>,
+where
+    D: Deserializer<'de>,
 {
     #[derive(Deserialize)]
     #[serde(untagged)]
@@ -100,12 +97,12 @@ fn deserialize_u32_or_string<'de, D>(deserializer: D) -> Result<u32, D::Error>
     })
 }
 
-#[derive(Deserialize,Debug)]
+#[derive(Deserialize, Debug)]
 struct MinorApiLogData {
     data: String,
 }
 
-#[derive(Deserialize,Debug)]
+#[derive(Deserialize, Debug)]
 struct GeetestGetData {
     gt: String,
     challenge: String,
@@ -117,14 +114,14 @@ struct GeetestGetData {
     callback: Option<String>,
 }
 
-#[derive(Deserialize,Debug)]
+#[derive(Deserialize, Debug)]
 struct GeetestGetTypeData {
     gt: String,
     t: u64,
     callback: Option<String>,
 }
 
-#[derive(Deserialize,Debug)]
+#[derive(Deserialize, Debug)]
 struct GeetestAjaxData {
     gt: String,
     challenge: String,
@@ -137,8 +134,7 @@ struct GeetestAjaxData {
 
 impl DispatchServer {
     pub fn new() -> DispatchServer {
-        let ds = DispatchServer {
-        };
+        let ds = DispatchServer {};
 
         return ds;
     }
@@ -155,7 +151,11 @@ impl DispatchServer {
         let config = DispatchConfig::load("dispatch_config.ini");
 
         //let (http_port, https_port) = (2880, 2443);
-        println!("Hostname {}, local IP {}", DispatchServer::get_hostname(), DispatchServer::get_local_ip());
+        println!(
+            "Hostname {}, local IP {}",
+            DispatchServer::get_hostname(),
+            DispatchServer::get_local_ip()
+        );
 
         let (http_port, https_port) = (config.http_port, config.https_port);
 
@@ -164,8 +164,12 @@ impl DispatchServer {
         //builder.set_min_proto_version(None).unwrap();
         //builder.set_cipher_list("DEFAULT").unwrap();
         //builder.set_mode(SslMode::NO_AUTO_CHAIN | SslMode::SEND_FALLBACK_SCSV);
-        builder.set_private_key_file(config.ssl_key.clone(), SslFiletype::PEM).unwrap();
-        builder.set_certificate_chain_file(config.ssl_cert.clone()).unwrap();
+        builder
+            .set_private_key_file(config.ssl_key.clone(), SslFiletype::PEM)
+            .unwrap();
+        builder
+            .set_certificate_chain_file(config.ssl_cert.clone())
+            .unwrap();
 
         let config = web::Data::new(config);
 
@@ -174,39 +178,90 @@ impl DispatchServer {
                 .app_data(config.clone())
                 .wrap(Logger::default())
                 .route("/", web::get().to(|| HttpResponse::Ok()))
-                .route("/query_security_file", web::get().to(DispatchServer::query_security_file))
-                .route("/query_region_list", web::get().to(DispatchServer::query_region_list))
-                .route("/query_cur_region/{region}", web::get().to(DispatchServer::query_cur_region))
+                .route(
+                    "/query_security_file",
+                    web::get().to(DispatchServer::query_security_file),
+                )
+                .route(
+                    "/query_region_list",
+                    web::get().to(DispatchServer::query_region_list),
+                )
+                .route(
+                    "/query_cur_region/{region}",
+                    web::get().to(DispatchServer::query_cur_region),
+                )
                 //.route("", web::post().to(DispatchServer::))
-                .route("/hk4e_global/mdk/shield/api/verify", web::post().to(DispatchServer::shield_verify))
+                .route(
+                    "/hk4e_global/mdk/shield/api/verify",
+                    web::post().to(DispatchServer::shield_verify),
+                )
                 //.route("/account/risky/api/check", web::post().to(DispatchServer::risky_api_check))
-                .route("/account/risky/api/check", web::post().to(DispatchServer::risky_api_check_old))
-                .route("/hk4e_global/mdk/shield/api/login", web::post().to(DispatchServer::shield_login))
-                .route("/hk4e_global/combo/granter/login/v2/login", web::post().to(DispatchServer::granter_login))
+                .route(
+                    "/account/risky/api/check",
+                    web::post().to(DispatchServer::risky_api_check_old),
+                )
+                .route(
+                    "/hk4e_global/mdk/shield/api/login",
+                    web::post().to(DispatchServer::shield_login),
+                )
+                .route(
+                    "/hk4e_global/combo/granter/login/v2/login",
+                    web::post().to(DispatchServer::granter_login),
+                )
                 // Misc stuff, not really required
-                .route("/common/h5log/log/batch", web::post().to(DispatchServer::minor_api_log))
-
-                .route("/combo/box/api/config/sdk/combo", web::get().to(DispatchServer::combo_combo))
-                .route("/hk4e_global/combo/granter/api/getConfig", web::get().to(DispatchServer::get_config))
-                .route("/hk4e_global/mdk/shield/api/loadConfig", web::get().to(DispatchServer::load_config))
+                .route(
+                    "/common/h5log/log/batch",
+                    web::post().to(DispatchServer::minor_api_log),
+                )
+                .route(
+                    "/combo/box/api/config/sdk/combo",
+                    web::get().to(DispatchServer::combo_combo),
+                )
+                .route(
+                    "/hk4e_global/combo/granter/api/getConfig",
+                    web::get().to(DispatchServer::get_config),
+                )
+                .route(
+                    "/hk4e_global/mdk/shield/api/loadConfig",
+                    web::get().to(DispatchServer::load_config),
+                )
                 //.route("/hk4e_global/combo/granter/api/getFont", web::get().to(DispatchServer::get_font))
-                .route("/hk4e_global/mdk/agreement/api/getAgreementInfos", web::get().to(DispatchServer::get_agreement_infos))
-                .route("/admin/mi18n/plat_oversea/m2020030410/m2020030410-version.json", web::get().to(DispatchServer::version_data))
-                .route("/hk4e_global/combo/granter/api/compareProtocolVersion", web::post().to(DispatchServer::compare_protocol_version))
+                .route(
+                    "/hk4e_global/mdk/agreement/api/getAgreementInfos",
+                    web::get().to(DispatchServer::get_agreement_infos),
+                )
+                .route(
+                    "/admin/mi18n/plat_oversea/m2020030410/m2020030410-version.json",
+                    web::get().to(DispatchServer::version_data),
+                )
+                .route(
+                    "/hk4e_global/combo/granter/api/compareProtocolVersion",
+                    web::post().to(DispatchServer::compare_protocol_version),
+                )
                 // GEETEST
                 .route("/get.php", web::get().to(DispatchServer::geetest_get))
-                .route("/gettype.php", web::get().to(DispatchServer::geetest_get_type))
+                .route(
+                    "/gettype.php",
+                    web::get().to(DispatchServer::geetest_get_type),
+                )
                 .route("/ajax.php", web::get().to(DispatchServer::geetest_ajax_get))
-                .route("/ajax.php", web::post().to(DispatchServer::geetest_ajax_post))
+                .route(
+                    "/ajax.php",
+                    web::post().to(DispatchServer::geetest_ajax_post),
+                )
                 // Logging
                 .route("/log/sdk/upload", web::post().to(DispatchServer::log_skip))
                 .route("/sdk/dataUpload", web::post().to(DispatchServer::log_skip))
-                .route("/crash/dataUpload", web::post().to(DispatchServer::log_skip))
-
+                .route(
+                    "/crash/dataUpload",
+                    web::post().to(DispatchServer::log_skip),
+                )
         })
-            .bind(format!("0.0.0.0:{}", http_port)).expect("Failed to bind HTTP port")
-            .bind_openssl(format!("0.0.0.0:{}", https_port), builder).expect("Failed to bind HTTPS port")
-            .run();
+        .bind(format!("0.0.0.0:{}", http_port))
+        .expect("Failed to bind HTTP port")
+        .bind_openssl(format!("0.0.0.0:{}", https_port), builder)
+        .expect("Failed to bind HTTPS port")
+        .run();
 
         http_server.stop(true).await;
     }
@@ -215,19 +270,31 @@ impl DispatchServer {
         return "".to_string();
     }
 
-    async fn query_region_list(c: web::Query<ClientInfo>, config: web::Data<DispatchConfig>) -> String {
+    async fn query_region_list(
+        c: web::Query<ClientInfo>,
+        config: web::Data<DispatchConfig>,
+    ) -> String {
         println!("RegionList, Client: {:?}", c);
 
         let keys = &config.client_secret_key;
 
-        let regions_list = config.regions.iter().map(|(r_name, r)| {
-            let mut region_info = dispatch_proto::RegionSimpleInfo::default();
-            region_info.name = r_name.clone();
-            region_info.title = r.title.clone();
-            region_info.r#type = r.r_type.clone();
-            region_info.dispatch_url = format!("http://{}:{}/query_cur_region/{}", Self::get_local_ip(), config.http_port, r_name);
-            region_info
-        }).collect();
+        let regions_list = config
+            .regions
+            .iter()
+            .map(|(r_name, r)| {
+                let mut region_info = dispatch_proto::RegionSimpleInfo::default();
+                region_info.name = r_name.clone();
+                region_info.title = r.title.clone();
+                region_info.r#type = r.r_type.clone();
+                region_info.dispatch_url = format!(
+                    "http://{}:{}/query_cur_region/{}",
+                    Self::get_local_ip(),
+                    config.http_port,
+                    r_name
+                );
+                region_info
+            })
+            .collect();
 
         /*let mut region_info = dispatch_proto::RegionSimpleInfo::default();
         region_info.name = "ps_rusty".into();
@@ -257,7 +324,11 @@ impl DispatchServer {
         return base64::encode(region_list_buf);
     }
 
-    async fn query_cur_region(req: web::HttpRequest, c: web::Query<ClientInfo>, config: web::Data<DispatchConfig>) -> String {
+    async fn query_cur_region(
+        req: web::HttpRequest,
+        c: web::Query<ClientInfo>,
+        config: web::Data<DispatchConfig>,
+    ) -> String {
         println!("CurRegion, Client: {:?}", c);
 
         let region = req.match_info().get("region").unwrap();
@@ -315,8 +386,12 @@ impl DispatchServer {
             let mut out_buf: Vec<u8> = Vec::new();
             let mut enc_buf: Vec<u8> = vec![0; KEY_SIZE];
 
-            for chunk in region_conf_buf.chunks((KEY_SIZE - 11) as usize) { // TODO: value hardcoded for the PKCS1 v1.5!
-                let len = keys.encrypt_key.public_encrypt(chunk, &mut enc_buf, Padding::PKCS1).unwrap();
+            for chunk in region_conf_buf.chunks((KEY_SIZE - 11) as usize) {
+                // TODO: value hardcoded for the PKCS1 v1.5!
+                let len = keys
+                    .encrypt_key
+                    .public_encrypt(chunk, &mut enc_buf, Padding::PKCS1)
+                    .unwrap();
                 out_buf.append(&mut enc_buf[0..len].to_vec());
                 enc_buf.resize(KEY_SIZE, 0);
             }
@@ -325,12 +400,16 @@ impl DispatchServer {
             let mut signer = Signer::new(MessageDigest::sha256(), &keypair).unwrap();
             let signature = signer.sign_oneshot_to_vec(&region_conf_buf).unwrap();
 
-            return format!("
+            return format!(
+                "
             {{
                 \"content\": \"{}\",
                 \"sign\": \"{}\"
             }}
-            ", base64::encode(out_buf), base64::encode(signature));
+            ",
+                base64::encode(out_buf),
+                base64::encode(signature)
+            );
         } else {
             return base64::encode(region_conf_buf);
         }
@@ -356,7 +435,8 @@ impl DispatchServer {
         let gt = "16bddce04c7385dbb7282778c29bba3e";
         let id = "a0f5968aa4664b55ac914bffa1cd8058";
 
-        let payload = format!("
+        let payload = format!(
+            "
             {{
                 \"action\": \"ACTION_GEETEST\",
                 \"geetest\": {{
@@ -367,7 +447,9 @@ impl DispatchServer {
                 }},
                 \"id\": \"{}\"
             }}
-        ", challenge, gt, id);
+        ",
+            challenge, gt, id
+        );
 
         return DispatchServer::make_answer(0, &payload);
     }
@@ -394,20 +476,22 @@ impl DispatchServer {
     }
 
     async fn combo_combo() -> String {
-
-        let payload = format!("{{
+        let payload = format!(
+            "{{
             \"vals\": {{
                 \"disable_email_bind_skip\": \"false\",
                 \"email_bind_remind\": \"true\",
                 \"email_bind_remind_interval\": \"7\"
             }}
-        }}");
+        }}"
+        );
 
-        return DispatchServer::make_answer(0,&payload);
+        return DispatchServer::make_answer(0, &payload);
     }
 
     async fn get_config() -> String {
-        let payload = format!("{{
+        let payload = format!(
+            "{{
             \"announce_url\": \"https://localhost/hk4e/announcement/index.html\",
             \"disable_ysdk_guard\": false,
             \"enable_announce_pic_popup\": true,
@@ -415,13 +499,15 @@ impl DispatchServer {
             \"protocol\": true,
             \"push_alias_type\": 2,
             \"qr_enabled\": false
-        }}");
+        }}"
+        );
 
-        return DispatchServer::make_answer(0,&payload);
+        return DispatchServer::make_answer(0, &payload);
     }
 
     async fn load_config() -> String {
-        let payload = format!("{{
+        let payload = format!(
+            "{{
             \"client\": \"PC\",
             \"disable_mmt\": false,
             \"disable_regist\": false,
@@ -443,8 +529,9 @@ impl DispatchServer {
                 \"fb\": \"\",
                 \"tw\": \"\"
             }}
-        }}");
-        return DispatchServer::make_answer(0,&payload);
+        }}"
+        );
+        return DispatchServer::make_answer(0, &payload);
     }
 
     async fn shield_verify(t: web::Json<TokenToVerify>) -> String {
@@ -465,8 +552,8 @@ impl DispatchServer {
     }
 
     /*
-        GEETEST
-     */
+       GEETEST
+    */
     async fn geetest_get(g: web::Query<GeetestGetData>) -> String {
         println!("GeetestGet: {:?}", g);
 
@@ -478,7 +565,8 @@ impl DispatchServer {
         if is_next {
             let callback = g.callback.as_ref().unwrap();
 
-            return format!("
+            return format!(
+                "
                 {}( {{
                     \"gt\": \"{}\",
                     \"challenge\": \"{}\",
@@ -528,7 +616,9 @@ impl DispatchServer {
                         \"voice\": \"Voice test\"
                     }},
                     \"gct_path\": \"/static/js/gct.d0a2919ae56f007ecb8e22fb47f80f33.js\"
-                }} )", callback, g.gt, g.challenge);
+                }} )",
+                callback, g.gt, g.challenge
+            );
         } else {
             let data = "
                 ( {
@@ -567,10 +657,8 @@ impl DispatchServer {
 
             return match g.callback.as_ref() {
                 None => data.to_string(),
-                Some(callback) => format!(
-                    "{}{}",
-                    callback, data),
-            }
+                Some(callback) => format!("{}{}", callback, data),
+            };
         }
     }
 
@@ -599,9 +687,7 @@ impl DispatchServer {
 
         return match &gt.callback {
             None => data.to_string(),
-            Some(callback) => format!(
-                "{}{}",
-                callback, data),
+            Some(callback) => format!("{}{}", callback, data),
         };
     }
 
@@ -624,13 +710,16 @@ impl DispatchServer {
         if is_next {
             let callback = ga.callback.as_ref().unwrap();
 
-            return format!("
+            return format!(
+                "
                 {}( {{
                 \"success\": 1,
                 \"message\": \"success\",
                 \"validate\": \"\",
                 \"score\": \"11\"
-            }} )", callback);
+            }} )",
+                callback
+            );
         } else {
             let data = "
                 {
@@ -647,8 +736,9 @@ impl DispatchServer {
                     "{}(
                         {}
                     )",
-                    callback, data),
-            }
+                    callback, data
+                ),
+            };
         }
     }
 
@@ -659,15 +749,18 @@ impl DispatchServer {
     }
 
     async fn get_agreement_infos() -> String {
-        let payload = format!("{{
+        let payload = format!(
+            "{{
             \"marketing_agreements\": []
-        }}");
+        }}"
+        );
 
         return DispatchServer::make_answer(0, &payload);
     }
 
     async fn compare_protocol_version() -> String {
-        let payload = format!("{{
+        let payload = format!(
+            "{{
             \"modified\": true,
             \"protocol\": {{
                 \"app_id\": 4,
@@ -680,7 +773,8 @@ impl DispatchServer {
                 \"teenager_proto\": \"\",
                 \"user_proto\": \"\"
             }}
-        }}");
+        }}"
+        );
 
         return DispatchServer::make_answer(0, &payload);
     }
@@ -711,22 +805,26 @@ impl DispatchServer {
         let open_id = 0x1234;
 
         #[cfg(not(feature = "raw_packet_dump"))]
-            let combo_token = Self::generate_fake_token();
+        let combo_token = Self::generate_fake_token();
         #[cfg(feature = "raw_packet_dump")]
-            let combo_token = std::str::from_utf8(&[32u8; 4096*3]).unwrap();
+        let combo_token = std::str::from_utf8(&[32u8; 4096 * 3]).unwrap();
 
-        return format!("{{
+        return format!(
+            "{{
             \"account_type\": \"{}\",
             \"combo_id\": \"{}\",
             \"combo_token\": \"{}\",
             \"data\": {{\"guest\": \"false\"}},
             \"heartbeat\": false,
             \"open_id\": \"{}\"
-        }}", account_type, combo_id, combo_token, open_id);
+        }}",
+            account_type, combo_id, combo_token, open_id
+        );
     }
 
     fn build_account_data(email: &str, name: &str, token: &str, uid: i32) -> String {
-        let payload = format!("{{
+        let payload = format!(
+            "{{
                 \"account\": {{
                     \"apple_name\": \"\",
                     \"area_code\": \"**\",
@@ -754,7 +852,9 @@ impl DispatchServer {
                 \"realname_operation\": \"None\",
                 \"realperson_required\": false,
                 \"safe_moblie_required\": \"false\"
-            }}", email, name, token, uid);
+            }}",
+            email, name, token, uid
+        );
 
         return payload.into();
     }
@@ -766,11 +866,15 @@ impl DispatchServer {
             _ => "ERROR",
         };
 
-        return format!("{{
+        return format!(
+            "{{
             \"retcode\": \"{}\",
             \"message\": \"{}\",
             \"data\": {}
-        }}", code, message, data).to_string();
+        }}",
+            code, message, data
+        )
+        .to_string();
     }
 
     fn generate_fake_token() -> String {
