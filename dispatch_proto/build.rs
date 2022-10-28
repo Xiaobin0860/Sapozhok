@@ -18,7 +18,9 @@ fn main() -> Result<()> {
 
     let mut config = prost_build::Config::new();
 
-    config.type_attribute(".", "#[derive(serde::Deserialize)]");
+    config
+        .type_attribute(".", "#[derive(serde::Deserialize)]")
+        .out_dir("src");
 
     let ret = config.compile_protos(&protos, &[format!("{}/", proto_dir)]);
 

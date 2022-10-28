@@ -1,14 +1,9 @@
 use std::sync::Arc;
 
-extern crate actix_web;
-extern crate base64;
-extern crate futures;
-extern crate openssl;
-
 use futures::executor;
 use serde::{Deserialize, Deserializer};
 
-use actix_web::{middleware::Logger, rt::System, web, App, HttpResponse, HttpServer};
+use actix_web::{middleware::Logger, rt::System, web, App, HttpRequest, HttpResponse, HttpServer};
 use openssl::rsa::Padding;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use rand::{distributions::Alphanumeric, Rng};
@@ -140,7 +135,7 @@ impl DispatchServer {
     }
 
     pub fn run(self) {
-        let mut _sys = System::new("http-server");
+        let mut _sys = System::new();
         let slef = Arc::new(self);
         executor::block_on(slef.run_internal());
         System::current().stop();
@@ -262,8 +257,6 @@ impl DispatchServer {
         .bind_openssl(format!("0.0.0.0:{}", https_port), builder)
         .expect("Failed to bind HTTPS port")
         .run();
-
-        http_server.stop(true).await;
     }
 
     async fn query_security_file() -> String {
@@ -325,7 +318,7 @@ impl DispatchServer {
     }
 
     async fn query_cur_region(
-        req: web::HttpRequest,
+        req: HttpRequest,
         c: web::Query<ClientInfo>,
         config: web::Data<DispatchConfig>,
     ) -> String {
