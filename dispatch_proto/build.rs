@@ -25,7 +25,7 @@ fn main() -> Result<()> {
     let ret = config.compile_protos(&protos, &[format!("{}/", proto_dir)]);
 
     match ret {
-        Ok(_) => return Ok(()),
+        Ok(_) => Ok(()),
         Err(e) => panic!("{}", e),
     }
 }
