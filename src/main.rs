@@ -1,6 +1,4 @@
-use crate::dispatch::DispatchServer;
-
-mod dispatch;
+use sapozhok::DispatchServer;
 
 fn main() {
     tracing_subscriber::fmt()

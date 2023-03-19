@@ -1,21 +1,20 @@
 use std::sync::Arc;
 
-use futures::executor;
-use serde::{Deserialize, Deserializer};
-
 use actix_web::{middleware::Logger, rt::System, web, App, HttpRequest, HttpResponse, HttpServer};
-use openssl::rsa::Padding;
-use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-use rand::{distributions::Alphanumeric, Rng};
-
-use prost::Message;
-
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use futures::executor;
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
+use openssl::rsa::Padding;
 use openssl::sign::Signer;
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
+use prost::Message;
+use rand::{distributions::Alphanumeric, Rng};
+use serde::{Deserialize, Deserializer};
+use tracing::{debug, info};
 use version_compare::Version;
 
-use crate::dispatch::DispatchConfig;
+use crate::DispatchConfig;
 
 #[derive(Clone, Default)]
 pub struct DispatchServer {}
@@ -55,15 +54,6 @@ struct LoginData {
     is_crypto: bool,
     password: String,
 }
-/*
-#[derive(Deserialize,Debug)]
-struct GranterData {
-    app_id: String,
-    channel_id: String,
-    device: String,
-    sign: String,
-    data: String,
-}*/
 
 #[allow(dead_code)]
 #[derive(Deserialize, Debug)]
@@ -144,20 +134,20 @@ impl DispatchServer {
         let slef = Arc::new(self);
         executor::block_on(slef.run_internal());
         System::current().stop();
-        println!("Finished!");
+        info!("Finished!");
     }
 
     async fn run_internal(self: &Arc<Self>) {
         let config = DispatchConfig::load("dispatch_config.ini");
 
-        //let (http_port, https_port) = (2880, 2443);
-        println!(
+        debug!(
             "Hostname {}, local IP {}",
             DispatchServer::get_hostname(),
             DispatchServer::get_local_ip()
         );
 
         let (http_port, https_port) = (config.http_port, config.https_port);
+        info!("http_port {http_port}, https_port {https_port}");
 
         let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls_server()).unwrap();
         //builder.set_verify(SslVerifyMode::NONE);
@@ -311,7 +301,7 @@ impl DispatchServer {
 
         region_list.encode(&mut region_list_buf).unwrap();
 
-        base64::encode(region_list_buf)
+        STANDARD.encode(region_list_buf)
     }
 
     async fn query_cur_region(
@@ -396,11 +386,11 @@ impl DispatchServer {
                 \"sign\": \"{}\"
             }}
             ",
-                base64::encode(out_buf),
-                base64::encode(signature)
+                STANDARD.encode(out_buf),
+                STANDARD.encode(signature)
             )
         } else {
-            base64::encode(region_conf_buf)
+            STANDARD.encode(region_conf_buf)
         }
     }
 

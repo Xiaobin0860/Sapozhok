@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 mhycrypt = { path = "../RustySamovar/mhycrypt" }
 dispatch_proto = { path = "dispatch_proto" }
-base64 = "0.13"
+base64 = "0.21"
 futures = "0.3"
 actix-web = { version = "4", features = ["openssl"] }
 serde = { version = "1", features = ["derive"] }
