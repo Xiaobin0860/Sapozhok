@@ -11,16 +11,21 @@ fn main() -> Result<()> {
         "RegionInfo",
     ];
 
-    let protos: Vec<String> = protos.iter().map(|&x| format!("{}/{}.proto", proto_dir, x)).collect();
+    let protos: Vec<String> = protos
+        .iter()
+        .map(|&x| format!("{}/{}.proto", proto_dir, x))
+        .collect();
 
     let mut config = prost_build::Config::new();
 
-    config.type_attribute(".", "#[derive(serde::Deserialize)]");
+    config
+        .type_attribute(".", "#[derive(serde::Deserialize)]")
+        .out_dir("src");
 
     let ret = config.compile_protos(&protos, &[format!("{}/", proto_dir)]);
 
     match ret {
-        Ok(_) => return Ok(()),
+        Ok(_) => Ok(()),
         Err(e) => panic!("{}", e),
     }
 }

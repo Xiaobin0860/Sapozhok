@@ -37,10 +37,10 @@ impl DispatchConfig {
         let key_directory = dispatch_config.get("KeyDirectory").unwrap();
 
         let client_secret_key = dispatch_config.get("ClientSecretKey").unwrap();
-        let client_secret_key = mhycrypt::load_ec2b_keys(&client_secret_key, &key_directory);
+        let client_secret_key = mhycrypt::load_ec2b_keys(client_secret_key, key_directory);
 
         let rsa_key_config = dispatch_config.get("RsaKeyConfig").unwrap();
-        let rsa_key_config = mhycrypt::load_rsa_keys(&rsa_key_config, &key_directory);
+        let rsa_key_config = mhycrypt::load_rsa_keys(rsa_key_config, key_directory);
 
         let ssl_cert = dispatch_config.get("SslCert").unwrap();
         let ssl_cert = format!("./{}/{}", key_directory, ssl_cert);
@@ -48,35 +48,40 @@ impl DispatchConfig {
         let ssl_key = dispatch_config.get("SslKey").unwrap();
         let ssl_key = format!("./{}/{}", key_directory, ssl_key);
 
-        let regions = dispatch_config.get("Regions").unwrap().split(",");
+        let regions = dispatch_config.get("Regions").unwrap().split(',');
 
-        let regions = regions.map(|region_name| {
-            let region_config = conf.section(Some(region_name)).unwrap();
+        let regions = regions
+            .map(|region_name| {
+                let region_config = conf.section(Some(region_name)).unwrap();
 
-            let secret_key = region_config.get("SecretKey").unwrap();
-            let secret_key = mhycrypt::load_ec2b_keys(&secret_key, &key_directory);
+                let secret_key = region_config.get("SecretKey").unwrap();
+                let secret_key = mhycrypt::load_ec2b_keys(secret_key, key_directory);
 
-            RegionConfig {
-                name: region_config.get("Name").unwrap().to_string(),
-                title: region_config.get("Title").unwrap().to_string(),
-                r_type: region_config.get("Type").unwrap().to_string(),
-                gateserver_ip: region_config.get("GateserverIp").unwrap().to_string(),
-                gateserver_port: region_config.get("GateserverPort").unwrap().parse().unwrap(),
-                secret_key: secret_key,
-            }
-        })
+                RegionConfig {
+                    name: region_config.get("Name").unwrap().to_string(),
+                    title: region_config.get("Title").unwrap().to_string(),
+                    r_type: region_config.get("Type").unwrap().to_string(),
+                    gateserver_ip: region_config.get("GateserverIp").unwrap().to_string(),
+                    gateserver_port: region_config
+                        .get("GateserverPort")
+                        .unwrap()
+                        .parse()
+                        .unwrap(),
+                    secret_key,
+                }
+            })
             .map(|r| (r.name.clone(), r))
             .collect();
 
         DispatchConfig {
-            http_port: http_port,
-            https_port: https_port,
-            ssl_cert: ssl_cert,
-            ssl_key: ssl_key,
+            http_port,
+            https_port,
+            ssl_cert,
+            ssl_key,
             enable_login: enable_login.parse().unwrap(),
-            client_secret_key: client_secret_key,
+            client_secret_key,
             rsa_keys: rsa_key_config,
-            regions: regions,
+            regions,
         }
     }
 }

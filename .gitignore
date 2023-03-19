@@ -19,3 +19,4 @@ keys/
 
 # Dispatch protobuf files
 dispatch_proto/protobuf
+dispatch_proto/src/proto.rs
